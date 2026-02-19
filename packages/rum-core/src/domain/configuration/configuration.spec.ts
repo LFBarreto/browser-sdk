@@ -631,6 +631,7 @@ describe('serializeRumConfiguration', () => {
       profilingSampleRate: 42,
       propagateTraceBaggage: true,
       betaTrackActionsInShadowDom: true,
+      allowedHtmlAttributes: ['data-testid'],
     }
 
     type MapRumInitConfigurationKey<Key extends string> = Key extends keyof InitConfiguration
@@ -687,6 +688,7 @@ describe('serializeRumConfiguration', () => {
       remote_configuration_id: '123',
       use_remote_configuration_proxy: true,
       profiling_sample_rate: 42,
+      allowed_html_attributes: ['data-testid'],
     })
   })
 })

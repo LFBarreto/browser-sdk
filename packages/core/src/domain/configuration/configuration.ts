@@ -139,9 +139,11 @@ export interface InitConfiguration {
   allowedTrackingOrigins?: MatchOption[] | undefined
 
   /**
-   * Optional list of HTML attributes allowed to be used in the action selector collection.
+   * A list of HTML attributes allowed to be used in the action selector collection.
    * Matches attributes against the event target and its ancestors.
    * If not provided, the SDK will use a default list of HTML attributes.
+   *
+   * @category Data Collection
    */
   allowedHtmlAttributes?: MatchOption[] | undefined
   
@@ -459,5 +461,6 @@ export function serializeConfiguration(initConfiguration: InitConfiguration) {
     source: initConfiguration.source,
     sdk_version: initConfiguration.sdkVersion,
     variant: initConfiguration.variant,
+    allowed_html_attributes: initConfiguration.allowedHtmlAttributes,
   } satisfies RawTelemetryConfiguration
 }

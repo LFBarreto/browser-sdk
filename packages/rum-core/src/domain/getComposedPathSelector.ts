@@ -13,16 +13,6 @@ const FILTERED_TAGNAMES = ['HTML', 'BODY'];
 const CHARACTER_LIMIT = 2 * ONE_KIBI_BYTE; 
 
 /**
- * separator between elements in the selector
- */
-const SEPARATOR = ';';
-
-/**
- * suffix to indicate truncation
- */
-const TRUNCATION_SUFFIX = '...';
-
-/**
  * Safe attributes that can be collected without PII concerns.
  * These are commonly used for testing, accessibility, and UI identification.
  */
@@ -60,24 +50,6 @@ export const SAFE_ATTRIBUTES = STABLE_ATTRIBUTES.concat([
 ]);
 
 /**
- * Data extracted from an element in the composedPath.
- */
-export interface ComposedPathElementData {
-  /** The tag name of the element (e.g., 'DIV', 'BUTTON') */
-  tagName: string
-  /** The element's id attribute, if present */
-  id?: string
-  /** Array of class names (with duplicates from parents removed) */
-  classes: string[]
-  /** Safe attributes collected from the element (with duplicate values from parents removed) */
-  attributes: Record<string, string>
-  /** The 1-based position among all siblings (only set if element has siblings) */
-  nthChild?: number
-  /** The 1-based position among siblings of the same tag type (only set if not unique of type) */
-  nthOfType?: number
-}
-
-/**
  * Extracts a selector string from a MouseEvent composedPath.
  *
  * This function:
@@ -91,7 +63,7 @@ export interface ComposedPathElementData {
  */
 export function getComposedPathSelector(composedPath: EventTarget[], actionNameAttribute: string | undefined, attributesAllowList: MatchOption[]): string {
   // Filter to only include Element nodes
-  const elements = composedPath.filter(isElement).filter((el) => !FILTERED_TAGNAMES.includes(el.tagName))
+  const elements = composedPath.filter((el) => el instanceof Element && !FILTERED_TAGNAMES.includes(el.tagName)) as Element[]
 
   if (elements.length === 0) {
     return '';
@@ -102,12 +74,10 @@ export function getComposedPathSelector(composedPath: EventTarget[], actionNameA
   let result: string = '';
 
   for (let i = 0; i < elements.length; i++) {
-    const element = elements[i]
-    const elementData = extractRawElementData(element, allowedAttributes)
-    const selectorString = getSelectorStringFromComposedPathElementData(elementData);
+    const selectorString = getSelectorStringFromElement(elements[i], allowedAttributes);
     const tmpResult = result + selectorString;
     if (tmpResult.length >= CHARACTER_LIMIT) {
-      result = safeTruncate(tmpResult, CHARACTER_LIMIT - TRUNCATION_SUFFIX.length, TRUNCATION_SUFFIX);
+      result = safeTruncate(tmpResult, CHARACTER_LIMIT - 3, '...');
       break;
     }
     result = tmpResult;
@@ -116,51 +86,33 @@ export function getComposedPathSelector(composedPath: EventTarget[], actionNameA
   return result;
 }
 
-function getSelectorStringFromComposedPathElementData(elementData: ComposedPathElementData): string {
-  let selector = elementData.tagName
-  if (elementData.id) {
-    selector += elementData.id
-  }
-  elementData.classes.forEach((c) => {
-    selector += `.${CSS.escape(c)}`
-  })
-  Object.entries(elementData.attributes).forEach(([key, value]) => {
-    selector += `[${CSS.escape(key)}="${CSS.escape(value)}"]`
-  })
-  if (elementData.nthChild) {
-    selector += `:nth-child(${elementData.nthChild})`
-  }
-  if (elementData.nthOfType) {
-    selector += `:nth-of-type(${elementData.nthOfType})`
-  }
-  return selector + SEPARATOR;
-}
-
 /**
- * Type guard to check if an EventTarget is an Element.
+ * Extracts a selector string from an element.
  */
-function isElement(target: EventTarget): target is Element {
-  return target instanceof Element
-}
-
-/**
- * Extracts raw data from an element without deduplication.
- */
-function extractRawElementData(element: Element, allowedAttributes: MatchOption[]): ComposedPathElementData {
-  const tagName = getTagNameSelector(element)
+function getSelectorStringFromElement(element: Element, allowedAttributes: MatchOption[]): string {
+  let selector = getTagNameSelector(element)
   const id = getIDSelector(element)
   const classes = getElementClassList(element)
   const attributes = extractSafeAttributes(element, allowedAttributes)
   const { nthChild, nthOfType } = computePositionData(element)
 
-  return {
-    tagName,
-    id,
-    classes,
-    attributes,
-    nthChild,
-    nthOfType,
+  if (id) {
+    selector += id
   }
+  Object.entries(attributes).forEach(([key, value]) => {
+    selector += `[${CSS.escape(key)}="${CSS.escape(value)}"]`
+  })
+  classes.forEach((c) => {
+    selector += `.${CSS.escape(c)}`
+  })
+  if (nthChild) {
+    selector += `:nth-child(${nthChild})`
+  }
+  if (nthOfType) {
+    selector += `:nth-of-type(${nthOfType})`
+  }
+
+  return `${selector};`;
 }
 
 function getElementClassList(element: Element): string[] {
@@ -188,29 +140,21 @@ function computePositionData(element: Element): { nthChild?: number; nthOfType?:
   }
 
   // Calculate nthChild (1-based index among all siblings)
-  let childIndex = 0
-  for (let i = 0; i < siblings.length; i++) {
-    if (siblings[i] === element) {
-      childIndex = i + 1 // 1-based
+  let nthChild: number | undefined;
+  let nthOfType: number | undefined;
+  const sameTypeSiblings = siblings.filter((sibling) => sibling.tagName === element.tagName)
+  for (let i = 0, j = 0; i < siblings.length; i++) {
+    const currentSibling = siblings[i]
+    if(currentSibling.tagName === element.tagName) {
+      j++
+    }
+    if (currentSibling === element) {
+      nthChild = i + 1 // 1-based
+      if(sameTypeSiblings.length > 1 && j > 0) {
+        nthOfType = j // 1-based
+      }
       break
     }
-  }
-  const nthChild: number | undefined = childIndex
-
-  // Calculate nthOfType (1-based index among siblings of the same tag type)
-  let nthOfType: number | undefined
-  const sameTypeSiblings = siblings.filter((sibling) => sibling.tagName === element.tagName)
-
-  // Only set nthOfType if there are multiple siblings of the same type
-  if (sameTypeSiblings.length > 1) {
-    let typeIndex = 0
-    for (let i = 0; i < sameTypeSiblings.length; i++) {
-      if (sameTypeSiblings[i] === element) {
-        typeIndex = i + 1 // 1-based
-        break
-      }
-    }
-    nthOfType = typeIndex
   }
 
   return { nthChild, nthOfType }
@@ -229,7 +173,7 @@ function extractSafeAttributes(element: Element, allowedAttributes: MatchOption[
   const attributes = Array.from(element.attributes)
   for (const attr of attributes) {
     if(matchList(allowedAttributes, attr.name)) {
-      result[attr.name] = CSS.escape(attr.value);
+      result[attr.name] = attr.value;
     }
   }
 

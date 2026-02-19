@@ -42,6 +42,7 @@ export const EXHAUSTIVE_INIT_CONFIGURATION: Required<InitConfiguration> = {
   source: 'browser',
   sdkVersion: '1.0.0',
   variant: 'variant',
+  allowedHtmlAttributes: [],
 }
 
 export const SERIALIZED_EXHAUSTIVE_INIT_CONFIGURATION = {
@@ -66,6 +67,7 @@ export const SERIALIZED_EXHAUSTIVE_INIT_CONFIGURATION = {
   source: 'browser',
   sdk_version: '1.0.0',
   variant: 'variant',
+  allowed_html_attributes: [],
 }
 
 /**
